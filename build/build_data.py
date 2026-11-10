@@ -14,6 +14,10 @@ comes from OpenStreetMap with a short description derived from its tags.
 import io, json, math, re, sys, time, urllib.parse, urllib.request, zipfile
 
 osm_path, aero_path, cities_zip, admin_path, out_path = sys.argv[1:6]
+SITES = {}
+if "--sites" in sys.argv:  # output of the website liveness check: [{url, code, ig}]
+    for x in json.load(open(sys.argv[sys.argv.index("--sites") + 1])):
+        SITES[x["url"]] = x
 GEOCODE = "--no-geocode" not in sys.argv
 
 
@@ -100,8 +104,6 @@ C = [
   "One of Mumbai's largest standalone bookshops, in Bandra West. Roomy, well lit, with a strong children's section and regular author events."),
  ("Flora Fountain pavement booksellers", None, "Mumbai", "Maharashtra", "secondhand", 18.9325, 72.8317,
   "Street stalls around Flora Fountain and along the Fort arcades selling second-hand paperbacks, textbooks and old magazines. Bargaining expected.", 1),
- ("Crossword, Kemps Corner", "crossword", "Mumbai", "Maharashtra", "chain", 18.9627, 72.8090,
-  "The flagship of India's best-known bookshop chain, under the Kemps Corner flyover. Bestsellers, children's books, stationery and gifts."),
  ("Blossom Book House", "blossom", "Bengaluru", "Karnataka", "secondhand", 12.9750, 77.6046,
   "Church Street institution since 2002, with several floors of second-hand and new books. People come with a list and leave with a bag of things that weren't on it."),
  ("The Bookworm", "bookworm", "Bengaluru", "Karnataka", "secondhand", 12.9747, 77.6050,
@@ -120,8 +122,6 @@ C = [
   "Flagship of the Karnataka chain and among the largest book stores in the country. Several floors covering textbooks, Kannada titles, fiction and stationery."),
  ("Lightroom Bookstore", "lightroom", "Bengaluru", "Karnataka", "independent", 12.9990, 77.6230,
   "A children's bookshop in Cooke Town. Picture books and young-adult titles chosen by people who have read them."),
- ("Goobe's Book Republic", "goobe", "Bengaluru", "Karnataka", "secondhand", 12.9749, 77.6035,
-  "Basement shop on Church Street with new and used books. Good for comics, graphic novels and science fiction."),
  ("Ankita Pustaka", "ankita", "Bengaluru", "Karnataka", "independent", 12.9450, 77.5710,
   "Gandhi Bazaar's Kannada bookshop and publisher. The place to find contemporary Kannada fiction and essays."),
  ("Higginbothams, Anna Salai", "higginbotham", "Chennai", "Tamil Nadu", "chain", 13.0640, 80.2700,
@@ -138,16 +138,14 @@ C = [
   "On College Street since 1886, the oldest bookshop in Kolkata. Academic and reference titles stacked to the ceiling."),
  ("Seagull Bookstore", "seagull", "Kolkata", "West Bengal", "independent", 22.5330, 88.3450,
   "Bookshop of the publisher Seagull Books in Bhowanipore. Translated literature, theatre, cinema and art."),
- ("Story", "story", "Kolkata", "West Bengal", "independent", 22.5395, 88.3505,
-  "A large, modern bookshop on Elgin Road spread over several floors. Wide Bengali and English ranges and a busy events calendar."),
+ ("Story, Salt Lake", "story", "Kolkata", "West Bengal", "independent", 22.5712, 88.4128,
+  "Kolkata's big general bookshop, on Elgin Road from 2004 until 2023 and now in a smaller space at Primarc Square, opposite Salt Lake Stadium. Bengali and English titles, gifts and a cafe."),
  ("Earthcare Books", "earthcare", "Kolkata", "West Bengal", "independent", 22.5440, 88.3530,
   "Small shop and publisher on Middleton Street focused on ecology, organic farming and development."),
  ("Abids Sunday Book Market", None, "Hyderabad", "Telangana", "secondhand", 17.3920, 78.4760,
   "Every Sunday the shuttered shopfronts of Abids become a second-hand book market. Novels, exam guides and old magazines spread out on the pavement.", 1),
  ("Pagdandi Books Chai Cafe", "pagdandi", "Pune", "Maharashtra", "independent", 18.5590, 73.7890,
   "Bookshop cafe in Baner started by two travellers. Known for open mics, writing workshops and long stays over chai."),
- ("International Book Service", "international book", "Pune", "Maharashtra", "independent", 18.5165, 73.8410,
-  "At Deccan Gymkhana since 1931. A quiet, old-fashioned shop with a careful general and academic selection."),
  ("Appa Balwant Chowk book market", None, "Pune", "Maharashtra", "academic", 18.5175, 73.8540,
   "Pune's textbook district, known as ABC. Dozens of shops selling school, engineering and exam-prep books, new and used.", 1),
  ("Literati Bookshop & Cafe", "literati", "Calangute", "Goa", "independent", 15.5380, 73.7620,
@@ -169,12 +167,12 @@ C = [
  ("Oxford Book & Stationery Co.", "oxford", "Darjeeling", "West Bengal", "independent", 27.0430, 88.2670,
   "On Chowrasta in Darjeeling, unrelated to the chain. The best selection anywhere on the Himalaya, tea and Tibet."),
  ("Cambridge Book Depot", "cambridge", "Mussoorie", "Uttarakhand", "independent", 30.4550, 78.0750,
-  "Mall Road shop where Ruskin Bond has long turned up on Saturdays to sign books. Stocks everything he has written."),
+  "Mall Road shop where Ruskin Bond signed books on Saturday afternoons for years. Stocks everything he has written."),
  ("The English Book Depot", "english book", "Dehradun", "Uttarakhand", "independent", 30.3250, 78.0440,
   "Dehradun institution on Rajpur Road since the 1920s. General books downstairs, coffee next door."),
- ("Gulshan Books, Nehru Park", "gulshan", "Srinagar", "Jammu and Kashmir", "independent", 34.0880, 74.8480,
-  "A bookshop and reading room on an island in Dal Lake, reached by shikara. Holds one of the largest collections of books on Kashmir."),
- ("Universal Booksellers", "universal book", "Lucknow", "Uttar Pradesh", "independent", 26.8500, 80.9460,
+ ("Gulshan Books, Residency Road", "gulshan", "Srinagar", "Jammu and Kashmir", "independent", 34.0712, 74.8140,
+  "Srinagar's best-known bookseller and publisher, with one of the largest ranges of books on Kashmir. Its famous shop on an island in Dal Lake closed in 2022 when the lease ended."),
+ ("Universal Booksellers", "universal", "Lucknow", "Uttar Pradesh", "independent", 26.8500, 80.9460,
   "Hazratganj mainstay since 1938. Lucknow's biggest general bookshop, strong on the city's own history."),
  ("Harmony, The Book Shop", "harmony", "Varanasi", "Uttar Pradesh", "independent", 25.2890, 83.0060,
   "A small, carefully chosen shop at Assi Ghat. Indian philosophy, religion, music and literature for visitors who want depth."),
@@ -188,8 +186,6 @@ C = [
   "A lending library with a bookshop attached in Sector 8. Members borrow, everyone else buys."),
  ("SABDA, Sri Aurobindo Ashram", "sabda", "Puducherry", "Puducherry", "religious", 11.9370, 79.8350,
   "The Ashram's book distribution arm. Works of Sri Aurobindo and the Mother in many languages."),
- ("Walking BookFairs", "walking book", "Bhubaneswar", "Odisha", "independent", 20.2900, 85.8400,
-  "An independent bookshop that began as a book truck touring the districts of Odisha. Fiction and children's books, sold with missionary zeal."),
  ("Lawyer's Book Stall", "lawyers book", "Guwahati", "Assam", "independent", 26.1860, 91.7450,
   "In Panbazar since the 1940s and a publisher as well as a bookseller. Assam's go-to for Assamese literature."),
  ("Ladakh Book Shop", "ladakh book", "Leh", "Ladakh", "independent", 34.1640, 77.5850,
@@ -199,6 +195,54 @@ C = [
  ("Higginbothams, Ooty", "higginbotham", "Ooty", "Tamil Nadu", "chain", 11.4110, 76.7000,
   "A hill-station branch of the old Madras bookseller, in a low colonial building near Charing Cross."),
 ]
+
+# Links confirmed in November 2026: (website, instagram handle)
+LINKS = {
+ "Bahrisons Booksellers": ("https://www.booksatbahri.com", "bahrisons_booksellers"),
+ "The Bookshop Inc.": ("", "thebookshopinc"),
+ "Faqir Chand & Sons": ("", "faqirchandbookstore"),
+ "Jain Book Agency": ("https://www.jainbookagency.com", ""),
+ "May Day Bookstore": ("https://leftword.com", "leftwordbooks"),
+ "Kitab Khana": ("https://www.kitabkhana.in", "kitabkhanabooks"),
+ "Trilogy by The Eternal Library": ("https://www.theeternallibrary.com", ""),
+ "Title Waves": ("https://titlewaves.in", ""),
+ "Oxford Bookstore, Connaught Place": ("https://oxfordbookstore.com", "oxfordbookstores"),
+ "Oxford Bookstore, Park Street": ("https://oxfordbookstore.com", "oxfordbookstores"),
+ "Blossom Book House": ("https://www.blossombookhouse.in", "blossombookhouse"),
+ "Gangarams Book Bureau": ("https://gangaramsbookbureau.com", "gangaramsbookbureau1977"),
+ "Champaca Bookstore": ("https://champaca.in", "champacabooks"),
+ "Atta Galatta": ("https://www.attagalatta.com", "attagalatta"),
+ "Sapna Book House, Gandhinagar": ("https://www.sapnaonline.com", ""),
+ "Lightroom Bookstore": ("https://www.lightroombookstore.com", ""),
+ "Ankita Pustaka": ("https://ankitapustaka.com", ""),
+ "Tulika Bookstore": ("https://www.tulikabooks.com", "tulikabooks"),
+ "Odyssey, Adyar": ("https://odyssey.in", ""),
+ "Seagull Bookstore": ("https://seagullbooks.org", ""),
+ "Earthcare Books": ("https://earthcarebooks.com", ""),
+ "Pagdandi Books Chai Cafe": ("https://pagdandi.org", "pagdandi"),
+ "Literati Bookshop & Cafe": ("https://www.literatigoa.com", "literatigoa"),
+ "The Dogears Bookshop": ("https://thedogearsbookshop.com", "the_dogears_bookshop"),
+ "DC Books, Kottayam": ("https://dcbooks.com", "dcbooks"),
+ "Modern Book Centre": ("https://www.modernbookcentre.com", ""),
+ "Rachna Books": ("https://rachnabooks.com", "rachnabooks"),
+ "The English Book Depot": ("https://englishbookdepot.com", "englishbookdepot"),
+ "Universal Booksellers": ("https://universalbooksellers.com", ""),
+ "SABDA, Sri Aurobindo Ashram": ("https://www.sabda.in", ""),
+}
+# Searched, but no current evidence either way.
+UNCONFIRMED = {"Maria Brothers", "Pilgrims Book House", "Oxford Book & Stationery Co.", "Capital Book Depot",
+               "The Browser Library & Bookstore"}
+# Not searched individually: treated as unconfirmed unless OpenStreetMap also has them.
+UNSEARCHED = {"Bookworm", "Higginbothams, Ooty", "Harmony, The Book Shop", "Idiom Booksellers", "Singbal's Book House",
+              "Ladakh Book Shop", "The Bookworm", "Select Book Shop", "Higginbothams, MG Road", "Higginbothams, Anna Salai",
+              "Lightroom Bookstore", "Seagull Bookstore", "Earthcare Books", "Modern Book Centre", "Universal Booksellers",
+              "SABDA, Sri Aurobindo Ashram", "Ankita Pustaka", "Tulika Bookstore", "Trilogy by The Eternal Library",
+              "Title Waves", "Sapna Book House, Gandhinagar", "Jain Book Agency", "DC Books, Kottayam"}
+CONFIRMED_ANYWAY = {"The Bookworm", "Select Book Shop", "Lightroom Bookstore", "Seagull Bookstore", "Earthcare Books",
+                    "Modern Book Centre", "Universal Booksellers", "SABDA, Sri Aurobindo Ashram", "Ankita Pustaka",
+                    "Tulika Bookstore", "Trilogy by The Eternal Library", "Title Waves", "Sapna Book House, Gandhinagar",
+                    "Jain Book Agency", "DC Books, Kottayam"}  # live own website or recent press
+NOT_A_BOOKSHOP = r"cool drinks|photostat|bakery|tailor|restaurant|pharmacy|salon|juice|tea stall|cyber|travels|mobile"
 
 CHAINS = [
  (r"crossword", "Crossword", "Branch of India's largest bookshop chain. Bestsellers, children's books, stationery and gifts."),
@@ -299,6 +343,8 @@ for e in json.load(open(osm_path))["elements"]:
     name = tidy_name(name)
     if len(norm(name)) < 3 and name.isascii():
         continue
+    if re.search(NOT_A_BOOKSHOP, name.lower()) and not re.search(r"book|pustak|granth|kitab", name.lower()):
+        continue
     pl = place(la, lo)
     if pl is None:
         continue
@@ -330,6 +376,23 @@ for e in json.load(open(osm_path))["elements"]:
     web = t.get("website") or t.get("contact:website") or ""
     if web and not web.startswith("http"):
         web = "https://" + web
+    ig = (t.get("contact:instagram") or t.get("instagram") or "").strip()
+    m = re.search(r"instagram\.com/([A-Za-z0-9_.]+)", web)
+    if m:
+        ig, web = ig or m.group(1), ""
+    ig = re.sub(r"^.*instagram\.com/", "", ig).strip("@/ ").split("/")[0].split("?")[0]
+    fb = (t.get("contact:facebook") or t.get("facebook") or "").strip()
+    if "facebook.com" in web:
+        fb, web = fb or web, ""
+    if fb and not fb.startswith("http"):
+        fb = "https://www.facebook.com/" + fb.lstrip("@/")
+    site = SITES.get(web)
+    if site:
+        if site["code"] in ("000", "404", "410", "ERR"):
+            web = ""  # dead link
+        elif not ig and len(site.get("ig", [])) == 1:
+            ig = site["ig"][0]
+    year = (t.get("check_date") or t.get("survey:date") or e.get("timestamp") or "")[:4]
     r = {"n": name, "t": typ, "c": city, "s": state, "b": blurb, "lat": round(la, 5), "lon": round(lo, 5),
          "o": f"{e['type']}/{e['id']}"}
     if alt: r["a"] = alt
@@ -337,6 +400,9 @@ for e in json.load(open(osm_path))["elements"]:
     if addr: r["ad"] = addr
     if web: r["w"] = web
     if t.get("opening_hours"): r["h"] = t["opening_hours"][:80]
+    if ig: r["ig"] = ig
+    if fb: r["fb"] = fb
+    if year.isdigit(): r["y"] = int(year)
     rows.append(r)
 
 
@@ -355,6 +421,18 @@ def geocode(q):
         time.sleep(1.1)
 
 
+def link(r, name, on_osm):
+    w, ig = LINKS.get(name, ("", ""))
+    if w: r["w"] = w
+    if ig: r["ig"] = ig
+    if r.get("m"):
+        return
+    if name in UNCONFIRMED or (name in UNSEARCHED and name not in CONFIRMED_ANYWAY and not on_osm):
+        r["u"] = 1
+    else:
+        r["v"] = 1
+
+
 report = {"osm": 0, "geocoded": 0, "approx": 0}
 for c in C:
     name, key, city, state, typ, la, lo, blurb = c[:8]
@@ -368,6 +446,7 @@ for c in C:
     if hit:
         hit.update({"n": name, "t": typ, "c": city, "s": state, "b": blurb, "f": 1})
         hit.pop("br", None)
+        link(hit, name, True)
         report["osm"] += 1
         continue
     r = {"n": name, "t": typ, "c": city, "s": state, "b": blurb, "lat": la, "lon": lo, "f": 1}
@@ -384,8 +463,9 @@ for c in C:
         r["x"] = 1
     if is_place:
         r["m"] = 1
+    link(r, name, False)
     report[src] += 1
-    print(f"  {src:9s} {name} ({city})", file=sys.stderr)
+    print(f"  {src:9s} {name} ({city}){' UNCONFIRMED' if r.get('u') else ''}", file=sys.stderr)
     rows.append(r)
 
 rows.sort(key=lambda r: (r["s"], r["c"], r["n"].lower()))
