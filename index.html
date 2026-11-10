@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bookshops of India</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<style>
+/* Layout: one screen. Slim header, a filter strip that doubles as the legend, then a full-bleed map or a reading-width list. */
+:root {
+  --paper: #f3f4f2;      /* matches the Positron land tone so the chrome and the map read as one sheet */
+  --surface: #ffffff;
+  --ink: #1b2126;
+  --ink-2: #56606a;
+  --ink-3: #8b949c;
+  --line: #dfe2e0;
+  --gold: #d6a11c;
+  --t-independent: #1f6f5c;
+  --t-chain: #2b4c8c;
+  --t-transit: #6b4fa3;
+  --t-stationery: #bf7426;
+  --t-academic: #8a2f3c;
+  --t-secondhand: #5f6b2d;
+  --t-religious: #b5486b;
+  --display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", sans-serif;
+  --body: "IBM Plex Sans", -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--paper); color: var(--ink); font: 14px/1.45 var(--body); display: flex; flex-direction: column; }
+[hidden] { display: none !important; }
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; padding: 12px 18px 10px; background: var(--surface); border-bottom: 1px solid var(--line); }
+.brand { display: flex; align-items: baseline; gap: 10px; margin-right: auto; min-width: 0; }
+.brand h1 { font: 700 22px/1.1 var(--display); letter-spacing: -0.01em; margin: 0; white-space: nowrap; }
+.brand .count { color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.field { height: 34px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); padding: 0 10px; }
+#q { width: 210px; }
+#state { max-width: 170px; }
+.seg { display: inline-flex; border: 1px solid var(--ink); border-radius: 6px; overflow: hidden; }
+.seg button { height: 32px; padding: 0 14px; border: 0; background: var(--surface); cursor: pointer; font-weight: 500; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: #fff; }
+
+.filters { display: flex; gap: 6px; padding: 8px 18px; overflow-x: auto; background: var(--surface); border-bottom: 1px solid var(--line); scrollbar-width: none; }
+.filters::-webkit-scrollbar { display: none; }
+.chip { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 11px 0 4px; border: 1px solid var(--line); border-radius: 15px; background: var(--surface); cursor: pointer; white-space: nowrap; }
+.chip .n { color: var(--ink-3); font-variant-numeric: tabular-nums; font-size: 12px; }
+.chip[aria-pressed="false"] { color: var(--ink-3); background: var(--paper); }
+.chip[aria-pressed="false"] .badge { background: var(--ink-3); }
+.chip.notable { padding-left: 11px; margin-left: 6px; }
+.chip.notable[aria-pressed="true"] { border-color: var(--gold); box-shadow: inset 0 0 0 1px var(--gold); }
+.chip.notable::before { content: ""; width: 10px; height: 10px; border-radius: 50%; border: 2.5px solid var(--gold); }
+
+.badge { flex: none; display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--c); }
+.badge svg { width: 15px; height: 15px; }
+.badge.lg { width: 30px; height: 30px; }
+.badge.lg svg { width: 20px; height: 20px; }
+.badge.pick { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4.5px var(--gold); }
+
+main { flex: 1; min-height: 0; position: relative; }
+#map { position: absolute; inset: 0; }
+#list { position: absolute; inset: 0; overflow-y: auto; padding: 4px 18px 60px; }
+.list-inner { max-width: 860px; margin: 0 auto; }
+.state { position: sticky; top: 0; z-index: 1; display: flex; align-items: baseline; gap: 10px; margin: 0; padding: 18px 0 8px; background: var(--paper); border-bottom: 1px solid var(--ink); font: 700 18px/1.2 var(--display); }
+.state span { font: 400 13px var(--body); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+ul.rows { list-style: none; margin: 0; padding: 0; }
+.row { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; gap: 4px 14px; align-items: start; padding: 13px 4px; border-bottom: 1px solid var(--line); }
+.row h3 { margin: 0; font: 600 15px/1.3 var(--body); }
+.row .alt { font-weight: 400; color: var(--ink-2); }
+.meta { margin: 1px 0 0; color: var(--ink-2); font-size: 13px; }
+.blurb { margin: 5px 0 0; max-width: 62ch; }
+.row.plain .blurb { color: var(--ink-2); }
+.go { height: 28px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); cursor: pointer; font-size: 13px; }
+.go:hover { border-color: var(--ink); }
+.empty { padding: 60px 0; text-align: center; color: var(--ink-2); }
+.more { display: block; margin: 22px auto; height: 36px; padding: 0 18px; border: 1px solid var(--ink); border-radius: 6px; background: var(--surface); cursor: pointer; }
+
+.maplibregl-popup-content { padding: 14px 16px 13px; border-radius: 8px; font: 14px/1.45 var(--body); color: var(--ink); box-shadow: 0 6px 24px rgba(27, 33, 38, .18); }
+.maplibregl-popup-close-button { font-size: 18px; padding: 2px 8px; color: var(--ink-2); }
+.pop-head { display: flex; gap: 11px; align-items: center; margin-right: 14px; }
+.pop h3 { margin: 0; font: 700 17px/1.2 var(--display); }
+.pop .meta { font-size: 12.5px; }
+.pop .blurb { margin: 10px 0 0; }
+.pop .note { margin: 8px 0 0; font-size: 12px; color: var(--ink-2); }
+.pop .links { display: flex; gap: 14px; margin-top: 10px; font-size: 13px; }
+.pop a { color: var(--ink); text-underline-offset: 2px; }
+.tag-pick { display: inline-block; margin-left: 6px; padding: 0 6px; border: 1px solid var(--gold); border-radius: 3px; font: 500 11px/16px var(--body); letter-spacing: .04em; text-transform: uppercase; color: #8a6508; vertical-align: 2px; }
+.fallback { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; color: var(--ink-2); }
+
+@media (max-width: 640px) {
+  header { padding: 10px 16px 8px; }
+  .brand h1 { font-size: 19px; }
+  .controls { width: 100%; }
+  #q { flex: 1; width: auto; min-width: 0; }
+  #state { max-width: 120px; }
+  .filters, #list { padding-left: 16px; padding-right: 16px; }
+  .row { grid-template-columns: 30px minmax(0, 1fr); }
+  .go { grid-column: 2; justify-self: start; margin-top: 4px; }
+}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs id="glyphs"></defs>
+</svg>
+
+<header>
+  <div class="brand">
+    <h1>Bookshops of India</h1>
+    <span class="count" id="count"></span>
+  </div>
+  <div class="controls">
+    <input class="field" id="q" type="search" placeholder="Search name or city" aria-label="Search by name or city">
+    <select class="field" id="state" aria-label="State"></select>
+    <div class="seg" role="group" aria-label="View">
+      <button id="v-map" aria-pressed="true">Map</button>
+      <button id="v-list" aria-pressed="false">List</button>
+    </div>
+  </div>
+</header>
+<div class="filters" id="filters" role="group" aria-label="Bookshop type"></div>
+
+<main>
+  <div id="map"></div>
+  <div id="list" hidden><div class="list-inner" id="list-inner"></div></div>
+</main>
+
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="data.js"></script>
+<script>
+(function () {
+  'use strict';
+  var DATA = window.BOOKSTORES || [];
+  DATA.forEach(function (d, i) { d.i = i; d.k = (d.n + ' ' + (d.a || '') + ' ' + d.c + ' ' + d.s + ' ' + (d.br || '')).toLowerCase(); });
+
+  // ---- types: label, colour and glyph (24x24, drawn in white) ----
+  var S = 'fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"';
+  var TYPES = [
+    { id: 'independent', label: 'Independent', color: '#1f6f5c',
+      g: '<path ' + S + ' d="M12 7.2C10.2 5.9 8 5.4 5.5 5.4v11c2.5 0 4.7.5 6.5 1.8 1.8-1.3 4-1.8 6.5-1.8v-11c-2.5 0-4.7.5-6.5 1.8zM12 7.2v11"/>' },
+    { id: 'chain', label: 'Chain', color: '#2b4c8c',
+      g: '<path ' + S + ' d="M5.5 6h3.2v12H5.5zM10 6h3.2v12H10zM14.9 7.6l2.9-.8 2.7 10.4-2.9.8z"/>' },
+    { id: 'secondhand', label: 'Second-hand & rare', color: '#5f6b2d',
+      g: '<path ' + S + ' d="M5 15.5h13v3.2H5zM7 11.4h12v3.2H7zM5.5 7.3h12v3.2h-12z"/>' },
+    { id: 'academic', label: 'Academic & textbook', color: '#8a2f3c',
+      g: '<path ' + S + ' d="M3.5 10L12 6l8.5 4-8.5 4zM7.3 12v3.8c1.4 1.3 3 1.9 4.7 1.9s3.3-.6 4.7-1.9V12M20.5 10v4.6"/>' },
+    { id: 'stationery', label: 'Books & stationery', color: '#bf7426',
+      g: '<path ' + S + ' d="M5.2 18.8l1-4.2L15.8 5l3.2 3.2-9.6 9.6zM13.6 7.2l3.2 3.2"/>' },
+    { id: 'religious', label: 'Faith & spiritual', color: '#b5486b',
+      g: '<path ' + S + ' d="M12 4.2c1.9 2.3 2.8 3.7 2.8 5.3a2.8 2.8 0 0 1-5.6 0c0-1.6.9-3 2.8-5.3zM5.2 14.2h13.6c-.8 2.9-3.4 4.8-6.8 4.8s-6-1.9-6.8-4.8z"/>' },
+    { id: 'transit', label: 'Airport & railway', color: '#6b4fa3',
+      g: '<path fill="#fff" d="M12 3.8c.8 0 1.3.9 1.3 2v3.7l6.2 3.7v1.7l-6.2-1.9v3.5l1.9 1.4v1.3L12 18.4l-3.2.8v-1.3l1.9-1.4V13l-6.2 1.9v-1.7l6.2-3.7V5.8c0-1.1.5-2 1.3-2z"/>' }
+  ];
+  var T = {};
+  TYPES.forEach(function (t) { T[t.id] = t; });
+  document.getElementById('glyphs').innerHTML = TYPES.map(function (t) {
+    return '<symbol id="g-' + t.id + '" viewBox="0 0 24 24">' + t.g + '</symbol>';
+  }).join('');
+  function badge(type, cls) {
+    return '<span class="badge ' + (cls || '') + '" style="--c:' + T[type].color + '"><svg aria-hidden="true"><use href="#g-' + type + '"/></svg></span>';
+  }
+  function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+
+  // ---- state ----
+  var on = {};
+  TYPES.forEach(function (t) { on[t.id] = true; });
+  var notableOnly = false, query = '', state = '', view = 'map', listLimit = 300;
+  var map = null, mapReady = false, popup = null, filtered = DATA;
+
+  // ---- controls ----
+  var elCount = document.getElementById('count');
+  var elFilters = document.getElementById('filters');
+  var counts = {};
+  DATA.forEach(function (d) { counts[d.t] = (counts[d.t] || 0) + 1; });
+  elFilters.innerHTML = TYPES.map(function (t) {
+    return '<button class="chip" data-t="' + t.id + '" aria-pressed="true">' + badge(t.id) + t.label + ' <span class="n">' + (counts[t.id] || 0) + '</span></button>';
+  }).join('') + '<button class="chip notable" id="notable" aria-pressed="false" title="Shops with a hand-written note">Notable only <span class="n">' + DATA.filter(function (d) { return d.f; }).length + '</span></button>';
+  elFilters.addEventListener('click', function (e) {
+    var b = e.target.closest('.chip');
+    if (!b) return;
+    if (b.id === 'notable') { notableOnly = !notableOnly; b.setAttribute('aria-pressed', notableOnly); }
+    else {
+      var t = b.dataset.t;
+      var allOn = TYPES.every(function (x) { return on[x.id]; });
+      var onlyThis = TYPES.every(function (x) { return on[x.id] === (x.id === t); });
+      // first click isolates a type; clicking the isolated one brings everything back; otherwise toggle
+      if (allOn) TYPES.forEach(function (x) { on[x.id] = x.id === t; });
+      else if (onlyThis) TYPES.forEach(function (x) { on[x.id] = true; });
+      else on[t] = !on[t];
+      elFilters.querySelectorAll('[data-t]').forEach(function (c) { c.setAttribute('aria-pressed', on[c.dataset.t]); });
+    }
+    apply();
+  });
+
+  var elState = document.getElementById('state');
+  var sc = {};
+  DATA.forEach(function (d) { sc[d.s] = (sc[d.s] || 0) + 1; });
+  elState.innerHTML = '<option value="">All states</option>' + Object.keys(sc).sort().map(function (s) {
+    return '<option value="' + esc(s) + '">' + esc(s) + ' (' + sc[s] + ')</option>';
+  }).join('');
+  elState.addEventListener('change', function () { state = elState.value; apply(true); });
+  var qt;
+  document.getElementById('q').addEventListener('input', function (e) {
+    clearTimeout(qt);
+    qt = setTimeout(function () { query = e.target.value.trim().toLowerCase(); apply(); }, 140);
+  });
+
+  var bMap = document.getElementById('v-map'), bList = document.getElementById('v-list');
+  var elMap = document.getElementById('map'), elList = document.getElementById('list'), elInner = document.getElementById('list-inner');
+  function setView(v, silent) {
+    view = v;
+    bMap.setAttribute('aria-pressed', v === 'map');
+    bList.setAttribute('aria-pressed', v === 'list');
+    elMap.hidden = v !== 'map';
+    elList.hidden = v !== 'list';
+    if (v === 'map' && map) map.resize();
+    if (v === 'list') renderList();
+    if (!silent) { try { history.replaceState(null, '', '#' + v); } catch (e) {} }
+  }
+  bMap.addEventListener('click', function () { setView('map'); });
+  bList.addEventListener('click', function () { setView('list'); });
+
+  // ---- filtering ----
+  function apply(fit) {
+    var words = query ? query.split(/\s+/) : [];
+    filtered = DATA.filter(function (d) {
+      if (!on[d.t]) return false;
+      if (notableOnly && !d.f) return false;
+      if (state && d.s !== state) return false;
+      for (var i = 0; i < words.length; i++) if (d.k.indexOf(words[i]) < 0) return false;
+      return true;
+    });
+    elCount.textContent = filtered.length === DATA.length
+      ? DATA.length.toLocaleString('en-IN') + ' bookshops'
+      : filtered.length.toLocaleString('en-IN') + ' of ' + DATA.length.toLocaleString('en-IN');
+    listLimit = 300;
+    if (view === 'list') { renderList(); elList.scrollTop = 0; }
+    if (mapReady) {
+      setSources();
+      if (popup) popup.remove();
+      if (fit && filtered.length) fitTo(filtered);
+    }
+  }
+
+  // ---- list ----
+  function typeLabel(d) { return d.br && d.t === 'chain' ? d.br : T[d.t].label; }
+  function renderList() {
+    if (!filtered.length) { elInner.innerHTML = '<p class="empty">No bookshops match. Clear the search or turn a type back on.</p>'; return; }
+    var rows = filtered.slice().sort(function (a, b) {
+      return a.s.localeCompare(b.s) || (b.f || 0) - (a.f || 0) || a.c.localeCompare(b.c) || a.n.localeCompare(b.n);
+    });
+    var per = {};
+    rows.forEach(function (d) { per[d.s] = (per[d.s] || 0) + 1; });
+    var html = '', cur = null;
+    rows.slice(0, listLimit).forEach(function (d) {
+      if (d.s !== cur) {
+        if (cur !== null) html += '</ul>';
+        cur = d.s;
+        html += '<h2 class="state">' + esc(d.s) + ' <span>' + per[d.s] + '</span></h2><ul class="rows">';
+      }
+      html += '<li class="row' + (d.f ? '' : ' plain') + '">' + badge(d.t, 'lg' + (d.f ? ' pick' : '')) +
+        '<div><h3>' + esc(d.n) + (d.a ? ' <span class="alt">' + esc(d.a) + '</span>' : '') + '</h3>' +
+        '<p class="meta">' + esc(d.c) + ' · ' + esc(typeLabel(d)) + '</p>' +
+        '<p class="blurb">' + esc(d.b) + '</p></div>' +
+        '<button class="go" data-i="' + d.i + '">Show on map</button></li>';
+    });
+    html += '</ul>';
+    if (rows.length > listLimit) html += '<button class="more" id="more">Show ' + Math.min(300, rows.length - listLimit) + ' more</button>';
+    elInner.innerHTML = html;
+  }
+  elInner.addEventListener('click', function (e) {
+    if (e.target.id === 'more') { var y = elList.scrollTop; listLimit += 300; renderList(); elList.scrollTop = y; return; }
+    var b = e.target.closest('.go');
+    if (!b) return;
+    var d = DATA[+b.dataset.i];
+    setView('map');
+    if (map) { map.jumpTo({ center: [d.lon, d.lat], zoom: Math.max(map.getZoom(), 15) }); openPopup(d); }
+  });
+
+  // ---- map ----
+  function fc(list) {
+    return { type: 'FeatureCollection', features: list.map(function (d) {
+      return { type: 'Feature', geometry: { type: 'Point', coordinates: [d.lon, d.lat] }, properties: { i: d.i, n: d.n, icon: d.t + (d.f ? '-pick' : '') } };
+    }) };
+  }
+  function setSources() {
+    map.getSource('shops').setData(fc(filtered.filter(function (d) { return !d.f; })));
+    map.getSource('picks').setData(fc(filtered.filter(function (d) { return d.f; })));
+  }
+  function fitTo(list) {
+    var b = new maplibregl.LngLatBounds();
+    list.forEach(function (d) { b.extend([d.lon, d.lat]); });
+    map.fitBounds(b, { padding: 60, maxZoom: 13, duration: 600 });
+  }
+  function pinSvg(t, pick) {
+    var c = T[t].color;
+    return '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 40 40">' +
+      (pick ? '<circle cx="20" cy="20" r="18.5" fill="#d6a11c"/><circle cx="20" cy="20" r="15.6" fill="#fff"/><circle cx="20" cy="20" r="13.6" fill="' + c + '"/>'
+            : '<circle cx="20" cy="20" r="14.5" fill="#fff"/><circle cx="20" cy="20" r="12.8" fill="' + c + '"/>') +
+      '<g transform="translate(9.2 9.2) scale(.9)">' + T[t].g + '</g></svg>';
+  }
+  function loadIcons() {
+    var jobs = [];
+    TYPES.forEach(function (t) {
+      [false, true].forEach(function (pick) {
+        jobs.push(new Promise(function (res) {
+          var img = new Image(80, 80);
+          img.onload = function () { map.addImage(t.id + (pick ? '-pick' : ''), img, { pixelRatio: 2 }); res(); };
+          img.onerror = res;
+          img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(pinSvg(t.id, pick));
+        }));
+      });
+    });
+    return Promise.all(jobs);
+  }
+  function openPopup(d) {
+    if (popup) popup.remove();
+    var links = '<a href="https://www.google.com/maps/search/?api=1&query=' + d.lat + ',' + d.lon + '" target="_blank" rel="noopener">Directions</a>';
+    if (d.w) links += '<a href="' + esc(d.w) + '" target="_blank" rel="noopener">Website</a>';
+    if (d.o) links += '<a href="https://www.openstreetmap.org/' + d.o + '" target="_blank" rel="noopener">OpenStreetMap</a>';
+    var note = d.m ? 'A market or street of booksellers, not a single shop.' : d.x ? 'Pin is approximate. Check the address before you go.' : '';
+    var sub = [d.ad, d.h].filter(Boolean).map(esc).join(' · ');
+    popup = new maplibregl.Popup({ offset: 16, maxWidth: '320px' })
+      .setLngLat([d.lon, d.lat])
+      .setHTML('<div class="pop"><div class="pop-head">' + badge(d.t, 'lg' + (d.f ? ' pick' : '')) +
+        '<div><h3>' + esc(d.n) + '</h3><p class="meta">' + esc(d.c) + ', ' + esc(d.s) + ' · ' + esc(typeLabel(d)) + '</p></div></div>' +
+        '<p class="blurb">' + esc(d.b) + (d.f ? '<span class="tag-pick">Notable</span>' : '') + '</p>' +
+        (sub ? '<p class="note">' + sub + '</p>' : '') +
+        (note ? '<p class="note">' + note + '</p>' : '') +
+        '<div class="links">' + links + '</div></div>')
+      .addTo(map);
+  }
+
+  function initMap() {
+    if (!window.maplibregl) {
+      elMap.innerHTML = '<p class="fallback">The map library did not load. Check your connection, or use the List view.</p>';
+      return;
+    }
+    map = new maplibregl.Map({
+      container: 'map',
+      style: 'https://tiles.openfreemap.org/styles/positron',
+      bounds: [[67.5, 6.5], [97.8, 36.2]],
+      fitBoundsOptions: { padding: 24 },
+      minZoom: 3, maxZoom: 18,
+      maxBounds: [[52, -4], [112, 44]],
+      attributionControl: { compact: true }
+    });
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
+    map.addControl(new maplibregl.GeolocateControl({ fitBoundsOptions: { maxZoom: 13 } }), 'top-right');
+    if (window.ResizeObserver) new ResizeObserver(function () { if (!elMap.hidden) map.resize(); }).observe(elMap);
+    map.on('load', function () {
+      loadIcons().then(function () {
+        var empty = { type: 'FeatureCollection', features: [] };
+        map.addSource('shops', { type: 'geojson', data: empty, cluster: true, clusterRadius: 46, clusterMaxZoom: 11 });
+        map.addSource('picks', { type: 'geojson', data: empty });
+        var font = ['Noto Sans Bold'];
+        map.addLayer({ id: 'clusters', type: 'circle', source: 'shops', filter: ['has', 'point_count'], paint: {
+          'circle-color': '#1b2126', 'circle-opacity': 0.88,
+          'circle-radius': ['step', ['get', 'point_count'], 13, 10, 16, 50, 21, 200, 27],
+          'circle-stroke-color': '#fff', 'circle-stroke-width': 2 } });
+        map.addLayer({ id: 'cluster-n', type: 'symbol', source: 'shops', filter: ['has', 'point_count'],
+          layout: { 'text-field': ['get', 'point_count_abbreviated'], 'text-font': font, 'text-size': 12, 'text-allow-overlap': true },
+          paint: { 'text-color': '#fff' } });
+        var labelLayout = {
+          'icon-image': ['get', 'icon'],
+          'icon-size': ['interpolate', ['linear'], ['zoom'], 4, 0.55, 10, 0.8, 14, 1],
+          'text-field': ['step', ['zoom'], '', 13, ['get', 'n']],
+          'text-font': font, 'text-size': 12, 'text-anchor': 'top', 'text-offset': [0, 1.35], 'text-max-width': 9, 'text-optional': true
+        };
+        var labelPaint = { 'text-color': '#1b2126', 'text-halo-color': '#fff', 'text-halo-width': 1.6 };
+        function sym(id, source, extra, zooms) {
+          var l = { id: id, type: 'symbol', source: source, layout: Object.assign({}, labelLayout, extra), paint: labelPaint };
+          if (source === 'shops') l.filter = ['!', ['has', 'point_count']];
+          if (zooms.min != null) l.minzoom = zooms.min;
+          if (zooms.max != null) l.maxzoom = zooms.max;
+          map.addLayer(l, zooms.under);
+        }
+        sym('shop', 'shops', { 'icon-allow-overlap': true }, {});
+        // notable shops are never clustered: thinned by collision when zoomed out, all shown once streets appear
+        sym('pick-far', 'picks', { 'icon-allow-overlap': false, 'icon-padding': 0 }, { max: 11, under: 'clusters' });
+        sym('pick-near', 'picks', { 'icon-allow-overlap': true }, { min: 11 });
+
+        map.on('click', 'clusters', function (e) {
+          var f = e.features[0];
+          map.getSource('shops').getClusterExpansionZoom(f.properties.cluster_id).then(function (z) {
+            map.easeTo({ center: f.geometry.coordinates, zoom: z + 0.4 });
+          });
+        });
+        ['shop', 'pick-far', 'pick-near'].forEach(function (id) {
+          map.on('click', id, function (e) { openPopup(DATA[e.features[0].properties.i]); });
+        });
+        ['clusters', 'shop', 'pick-far', 'pick-near'].forEach(function (id) {
+          map.on('mouseenter', id, function () { map.getCanvas().style.cursor = 'pointer'; });
+          map.on('mouseleave', id, function () { map.getCanvas().style.cursor = ''; });
+        });
+        mapReady = true;
+        setSources();
+      });
+    });
+  }
+
+  initMap();
+  apply();
+  function fromHash() { var v = location.hash === '#list' ? 'list' : 'map'; if (v !== view) setView(v, true); }
+  window.addEventListener('hashchange', fromHash);
+  fromHash();
+})();
+</script>
+</body>
+</html>
