@@ -242,6 +242,7 @@ CONFIRMED_ANYWAY = {"The Bookworm", "Select Book Shop", "Lightroom Bookstore", "
                     "Modern Book Centre", "Universal Booksellers", "SABDA, Sri Aurobindo Ashram", "Ankita Pustaka",
                     "Tulika Bookstore", "Trilogy by The Eternal Library", "Title Waves", "Sapna Book House, Gandhinagar",
                     "Jain Book Agency", "DC Books, Kottayam"}  # live own website or recent press
+BOOK_WORD = r"book|pustak|granth|kitab|library|novel|publication|prakashan"
 NOT_A_BOOKSHOP = r"cool drinks|photostat|bakery|tailor|restaurant|pharmacy|salon|juice|tea stall|cyber|travels|mobile"
 
 CHAINS = [
@@ -328,7 +329,7 @@ for e in json.load(open(aero_path))["elements"]:
     if la:
         terminals.append((la, lo))
 
-rows, seen = [], []
+rows, seen, delisted = [], [], 0
 for e in json.load(open(osm_path))["elements"]:
     t = e.get("tags", {})
     raw = t.get("name")
@@ -354,6 +355,11 @@ for e in json.load(open(osm_path))["elements"]:
     seen.append((k, la, lo))
     near = any(abs(la - a) < 0.01 and abs(lo - b) < 0.01 and hav(la, lo, a, b) < 0.25 for a, b in terminals)
     typ, chain = classify(name, t, near)
+    # De-list shops that are stationers first: tagged shop=stationery on OpenStreetMap, or tagged as a
+    # bookshop but with a stationery-style name and no book word in it. "Books & Stationery" hybrids stay.
+    if t.get("shop") == "stationery" or (typ == "stationery" and not re.search(BOOK_WORD, name.lower())):
+        delisted += 1
+        continue
     city, state = pl
     desc = (t.get("description") or "").strip()
     if chain:
@@ -468,11 +474,92 @@ for c in C:
     print(f"  {src:9s} {name} ({city}){' UNCONFIRMED' if r.get('u') else ''}", file=sys.stderr)
     rows.append(r)
 
+# ---------- second source: Overture Maps places ----------
+def opt(flag):
+    return sys.argv[sys.argv.index(flag) + 1] if flag in sys.argv else None
+
+
+GENERIC_WORDS = set("book books store stores stall stalls house centre center depot depo shop shoppe the and of co company "
+                    "sons bros brothers pvt ltd booksellers bookseller bookstore bookshop bookstall agency new sri shri shree "
+                    "stationery stationary stationers stationaries stationarys xerox general corner world point press".split())
+
+
+def core(n):
+    return [w for w in norm(n).split() if w not in GENERIC_WORDS and len(w) > 1]
+
+
+def name_sim(a, b):
+    ca, cb = core(a), core(b)
+    if not ca or not cb:
+        return 1.0 if norm(a) == norm(b) else 0.0
+    sa, sb = set(ca), set(cb)
+    small = sa if len(sa) <= len(sb) else sb
+    if small <= (sa | sb) and (small <= sa and small <= sb) and max(len(w) for w in small) >= 4:
+        return 0.92
+    import difflib
+    return difflib.SequenceMatcher(None, " ".join(sorted(ca)), " ".join(sorted(cb))).ratio()
+
+
+ov_path = opt("--overture")
+want_sites = set()
+ov_stats = {"matched": 0, "web": 0, "ig": 0, "fb": 0}
+if ov_path:
+    PROVIDER = {"meta": "Meta", "Microsoft": "Microsoft", "Foursquare": "Foursquare", "AllThePlaces": "AllThePlaces"}
+    og = {}
+    for o in json.load(open(ov_path, encoding="utf-8")):
+        og.setdefault((int(o["lat"] * 50), int(o["lon"] * 50)), []).append(o)
+    for r in rows:
+        if r.get("m"):
+            continue
+        reach = 3.0 if r.get("x") else 1.0
+        span = 2 if r.get("x") else 1
+        gx, gy = int(r["lat"] * 50), int(r["lon"] * 50)
+        hits = []
+        for dx in range(-span, span + 1):
+            for dy in range(-span, span + 1):
+                for o in og.get((gx + dx, gy + dy), []):
+                    d = hav(r["lat"], r["lon"], o["lat"], o["lon"])
+                    if d > reach or o["c"] < 0.3:  # Overture itself doubts places below 0.3
+                        continue
+                    sim = name_sim(r["n"], o["n"])
+                    generic = not core(r["n"])
+                    if len(set(core(r["n"])) & set(core(o["n"]))) <= 1 and d > 0.3 and not r.get("x"):
+                        continue  # one shared word is not enough beyond 300 m
+                    ok = (sim >= 0.8 and not generic) or (sim >= 0.62 and d <= 0.3 and not generic) or (generic and sim == 1.0 and d <= 0.1)
+                    if ok:
+                        hits.append((sim - d / 10, o))
+        if not hits:
+            continue
+        hits.sort(key=lambda h: -h[0])
+        best = hits[0][1]
+        ov_stats["matched"] += 1
+        if "--show-matches" in sys.argv and ov_stats["matched"] % 9 == 0:
+            print(f"   match: {r['n']!r} ~ {best['n']!r} {hav(r['lat'], r['lon'], best['lat'], best['lon']):.2f}km conf {best['c']}", file=sys.stderr)
+        r["od"] = sorted({PROVIDER.get(x, x) for h in hits[:3] for x in h[1]["d"]})
+        r["oc"] = best["c"]
+        for u in best["w"] + best["s"]:
+            u = u.strip()
+            if "instagram.com/" in u and not r.get("ig"):
+                h = re.sub(r"^.*instagram\.com/", "", u).strip("/").split("/")[0].split("?")[0]
+                if h:
+                    r["ig"] = h; ov_stats["ig"] += 1
+            elif "facebook.com/" in u and not r.get("fb"):
+                r["fb"] = u; ov_stats["fb"] += 1
+            elif u.startswith("http") and not r.get("w") and not re.search(r"facebook|instagram|twitter|youtube|google\.|justdial|wa\.me|linktr", u):
+                site = SITES.get(u)
+                if site is None:
+                    want_sites.add(u)
+                elif site["code"] not in ("000", "404", "410", "ERR", "500", "502", "503"):
+                    r["w"] = u; ov_stats["web"] += 1
+    print("overture:", ov_stats, "| sites still to check:", len(want_sites), file=sys.stderr)
+    if opt("--want-sites"):
+        open(opt("--want-sites"), "w").write("".join(f"x\t{u}\n" for u in sorted(want_sites)))
+
 rows.sort(key=lambda r: (r["s"], r["c"], r["n"].lower()))
 with open(out_path, "w", encoding="utf-8") as f:
     f.write("// Generated by build/build_data.py. Map data (c) OpenStreetMap contributors, ODbL.\n")
     f.write("window.BOOKSTORES = " + json.dumps(rows, ensure_ascii=False, separators=(",", ":")) + ";\n")
 import collections
-print(len(rows), "stores;", report, file=sys.stderr)
+print(len(rows), "stores;", report, "| stationers de-listed:", delisted, file=sys.stderr)
 print(collections.Counter(r["t"] for r in rows), file=sys.stderr)
 print(collections.Counter(r["s"] for r in rows).most_common(40), file=sys.stderr)

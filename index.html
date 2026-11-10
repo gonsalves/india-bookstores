@@ -55,6 +55,8 @@ header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; pa
 .chip[aria-pressed="false"] .badge { background: var(--ink-3); }
 .chip.notable { padding-left: 11px; margin-left: 6px; }
 .chip.notable[aria-pressed="true"] { border-color: var(--gold); box-shadow: inset 0 0 0 1px var(--gold); }
+.chip.multi { padding-left: 11px; }
+.chip.multi[aria-pressed="true"] { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
 .chip.notable::before { content: ""; width: 10px; height: 10px; border-radius: 50%; border: 2.5px solid var(--gold); }
 
 .badge { flex: none; display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--c); }
@@ -175,7 +177,8 @@ ul.rows { list-style: none; margin: 0; padding: 0; }
   // ---- state ----
   var on = {};
   TYPES.forEach(function (t) { on[t.id] = true; });
-  var notableOnly = false, query = '', state = '', view = 'map', listLimit = 300;
+  var notableOnly = false, multiOnly = false, query = '', state = '', view = 'map', listLimit = 300;
+  function multi(d) { return !!(d.v || d.m || (d.od && !d.u)); }
   var map = null, mapReady = false, popup = null, filtered = DATA;
 
   // ---- controls ----
@@ -185,11 +188,13 @@ ul.rows { list-style: none; margin: 0; padding: 0; }
   DATA.forEach(function (d) { counts[d.t] = (counts[d.t] || 0) + 1; });
   elFilters.innerHTML = TYPES.map(function (t) {
     return '<button class="chip" data-t="' + t.id + '" aria-pressed="true">' + badge(t.id) + t.label + ' <span class="n">' + (counts[t.id] || 0) + '</span></button>';
-  }).join('') + '<button class="chip notable" id="notable" aria-pressed="false" title="Shops with a hand-written note">Notable only <span class="n">' + DATA.filter(function (d) { return d.f; }).length + '</span></button>';
+  }).join('') + '<button class="chip notable" id="notable" aria-pressed="false" title="Shops with a hand-written note">Notable only <span class="n">' + DATA.filter(function (d) { return d.f; }).length + '</span></button>' +
+    '<button class="chip multi" id="multi" aria-pressed="false" title="Checked online, or listed by a second map source as well as OpenStreetMap">2+ sources only <span class="n">' + DATA.filter(multi).length + '</span></button>';
   elFilters.addEventListener('click', function (e) {
     var b = e.target.closest('.chip');
     if (!b) return;
     if (b.id === 'notable') { notableOnly = !notableOnly; b.setAttribute('aria-pressed', notableOnly); }
+    else if (b.id === 'multi') { multiOnly = !multiOnly; b.setAttribute('aria-pressed', multiOnly); }
     else {
       var t = b.dataset.t;
       var allOn = TYPES.every(function (x) { return on[x.id]; });
@@ -237,6 +242,7 @@ ul.rows { list-style: none; margin: 0; padding: 0; }
     filtered = DATA.filter(function (d) {
       if (!on[d.t]) return false;
       if (notableOnly && !d.f) return false;
+      if (multiOnly && !multi(d)) return false;
       if (state && d.s !== state) return false;
       for (var i = 0; i < words.length; i++) if (d.k.indexOf(words[i]) < 0) return false;
       return true;
@@ -272,8 +278,10 @@ ul.rows { list-style: none; margin: 0; padding: 0; }
   function statusText(d) {
     if (d.m) return 'A market or street of booksellers, not a single shop.';
     if (d.v) return 'Checked online in November 2026.' + (d.x ? ' Pin is approximate.' : '');
-    if (d.u) return 'Could not confirm it is still open. Call ahead.' + (d.x ? ' Pin is approximate.' : '');
-    return 'Not individually checked.' + (d.y ? ' OpenStreetMap record last updated ' + d.y + '.' : '');
+    var also = d.od ? d.od.join(' and ') : '';
+    if (d.u) return (also ? 'Listed by ' + also + ', but I could not confirm it is still open.' : 'Could not confirm it is still open.') + ' Call ahead.' + (d.x ? ' Pin is approximate.' : '');
+    if (also) return 'Two sources: OpenStreetMap and ' + also + '.';
+    return 'OpenStreetMap only' + (d.y ? ', last updated ' + d.y : '') + '.';
   }
 
   // ---- list ----
