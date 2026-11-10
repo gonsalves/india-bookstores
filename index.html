@@ -177,7 +177,7 @@ ul.rows { list-style: none; margin: 0; padding: 0; }
   // ---- state ----
   var on = {};
   TYPES.forEach(function (t) { on[t.id] = true; });
-  var notableOnly = false, multiOnly = false, query = '', state = '', view = 'map', listLimit = 300;
+  var notableOnly = false, multiOnly = true, query = '', state = '', view = 'map', listLimit = 300;
   function multi(d) { return !!(d.v || d.m || (d.od && !d.u)); }
   var map = null, mapReady = false, popup = null, filtered = DATA;
 
@@ -189,12 +189,18 @@ ul.rows { list-style: none; margin: 0; padding: 0; }
   elFilters.innerHTML = TYPES.map(function (t) {
     return '<button class="chip" data-t="' + t.id + '" aria-pressed="true">' + badge(t.id) + t.label + ' <span class="n">' + (counts[t.id] || 0) + '</span></button>';
   }).join('') + '<button class="chip notable" id="notable" aria-pressed="false" title="Shops with a hand-written note">Notable only <span class="n">' + DATA.filter(function (d) { return d.f; }).length + '</span></button>' +
-    '<button class="chip multi" id="multi" aria-pressed="false" title="Checked online, or listed by a second map source as well as OpenStreetMap">2+ sources only <span class="n">' + DATA.filter(multi).length + '</span></button>';
+    '<button class="chip multi" id="multi" aria-pressed="false" title="Shops that appear on OpenStreetMap and nowhere else. Hidden until you turn this on.">Show single-source shops <span class="n">' + DATA.filter(function (d) { return !multi(d); }).length + '</span></button>';
+  function typeCounts() {
+    var c = {};
+    DATA.forEach(function (d) { if (!multiOnly || multi(d)) c[d.t] = (c[d.t] || 0) + 1; });
+    elFilters.querySelectorAll('[data-t]').forEach(function (b) { b.querySelector('.n').textContent = c[b.dataset.t] || 0; });
+  }
+  typeCounts();
   elFilters.addEventListener('click', function (e) {
     var b = e.target.closest('.chip');
     if (!b) return;
     if (b.id === 'notable') { notableOnly = !notableOnly; b.setAttribute('aria-pressed', notableOnly); }
-    else if (b.id === 'multi') { multiOnly = !multiOnly; b.setAttribute('aria-pressed', multiOnly); }
+    else if (b.id === 'multi') { multiOnly = !multiOnly; b.setAttribute('aria-pressed', !multiOnly); typeCounts(); }
     else {
       var t = b.dataset.t;
       var allOn = TYPES.every(function (x) { return on[x.id]; });
@@ -247,9 +253,10 @@ ul.rows { list-style: none; margin: 0; padding: 0; }
       for (var i = 0; i < words.length; i++) if (d.k.indexOf(words[i]) < 0) return false;
       return true;
     });
-    elCount.textContent = filtered.length === DATA.length
-      ? DATA.length.toLocaleString('en-IN') + ' bookshops'
-      : filtered.length.toLocaleString('en-IN') + ' of ' + DATA.length.toLocaleString('en-IN');
+    var pool = multiOnly ? DATA.filter(multi).length : DATA.length;
+    elCount.textContent = filtered.length === pool
+      ? pool.toLocaleString('en-IN') + ' bookshops'
+      : filtered.length.toLocaleString('en-IN') + ' of ' + pool.toLocaleString('en-IN');
     listLimit = 300;
     if (view === 'list') { renderList(); elList.scrollTop = 0; }
     if (mapReady) {
